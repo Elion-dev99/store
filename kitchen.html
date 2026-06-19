@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>キッチンモニター (KDS)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        /* 厨房用の見やすいダークテーマ */
+        :root { --bg-dark: #121212; --card-bg: #1e1e1e; --text-light: #ffffff; --primary: #e44d26; --success: #27ae60; --warning: #f39c12; --border: #333333; }
+        body { font-family: 'Noto Sans JP', sans-serif; background-color: var(--bg-dark); color: var(--text-light); margin: 0; padding: 0; }
+        
+        /* ヘッダー */
+        .header { background-color: #000000; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); position: sticky; top: 0; z-index: 100; }
+        .header h1 { margin: 0; font-size: 1.5rem; letter-spacing: 2px; }
+        .clock { font-size: 1.2rem; font-weight: bold; color: var(--warning); }
+        .stats { font-size: 1rem; color: #aaaaaa; }
+
+        /* オーダーのグリッド表示 */
+        .kds-container { padding: 24px; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+        
+        /* チケット（伝票）のデザイン */
+        .ticket { background: var(--card-bg); border-radius: 12px; border-top: 8px solid var(--primary); padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); display: flex; flex-direction: column; animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* 呼出用の特別スタイル */
+        .ticket.call { border-top-color: var(--warning); background-color: #2c2514; }
+
+        .ticket-header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 16px; }
+        .table-id { font-size: 2rem; font-weight: 900; color: var(--text-light); }
+        .time-elapsed { font-size: 1.1rem; color: #aaaaaa; font-weight: bold; }
+        .time-elapsed.late { color: var(--primary); } /* 時間経過で赤くする */
+
+        .ticket-body { flex-grow: 1; }
+        .menu-name { font-size: 1.8rem; font-weight: 700; line-height: 1.3; margin-bottom: 20px; }
+
+        /* ボタン */
+        .btn-serve { background: var(--success); color: white; border: none; padding: 16px; width: 100%; font-size: 1.4rem; font-weight: bold; border-radius: 8px; cursor: pointer; transition: 0.1s; }
+        .btn-serve:active { transform: scale(0.98); opacity: 0.8; }
+        .ticket.call .btn-serve { background: var(--warning); color: #000; }
+
+        /* 通知トースト */
+        #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: #ffffff; color: #000000; padding: 16px 32px; border-radius: 30px; font-weight: bold; font-size: 1.2rem; opacity: 0; transition: 0.3s; z-index: 1000; box-shadow: 0 4px 15px rgba(0,0,0,0.3); pointer-events: none; }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        
+        /* 注文がない場合 */
+        .empty-state { grid-column: 1 / -1; text-align: center; padding: 60px 0; color: #555555; font-size: 2rem; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="toast"></div>
+
+    <div class="header">
+        <h1>🍳 KITCHEN MONITOR</h1>
+        <div class="stats">未提供: <span id="pending-count" style="color:#fff; font-weight:bold;">0</span> 件</div>
+        <div class="clock" id="realtime-clock">00:00:00</div>
+    </div>
+
+    <div class="kds-container" id="kds-grid">
+        <div class="empty-state">読み込み中...</div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+        import { getFirestore, collection, onSnapshot, doc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+        const db = getFirestore(initializeApp({
+            apiKey: "AIzaSyD11KS2FcAeVF17n62FEJ0GVwiW-z9sf4A",
+            authDomain: "store-eec2f.firebaseapp.com",
+            projectId: "store-eec2f",
+            storageBucket: "store-eec2f.firebasestorage.app",
+            messagingSenderId: "571239549348",
+            appId: "1:571239549348:web:c6c5c8c2f8661e02ef9931"
+        }));
+
+        let previousOrderCount = 0; // 新規注文音を鳴らすための判定用
+
+        function showToast(msg) {
+            const toast = document.getElementById("toast");
+            toast.innerText = msg;
+            toast.classList.add("show");
+            setTimeout(() => toast.classList.remove("show"), 3000);
+        }
+
+        // 時計の更新
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('realtime-clock').innerText = now.toLocaleTimeString('ja-JP');
+        }, 1000);
+
+        // KDSのメイン監視処理（ステータスが "ordered" のものだけを取得）
+        function startKDS() {
+            // 注意: orderBy("createdAt") と where("status") を組み合わせるにはFirestoreのインデックス作成が必要なため、
+            // 今回は全件取得後にJavaScript側でソート処理を行い、どなたでも即座に動くように構築しております。
+            const q = collection(db, "orders");
+            
+            onSnapshot(q, (snapshot) => {
+                const grid = document.getElementById('kds-grid');
+                let orders = [];
+
+                snapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    if (data.status === "ordered") {
+                        orders.push({ id: docSnap.id, ...data });
+                    }
+                });
+
+                // 新しい注文が入ったかどうかの判定
+                if (orders.length > previousOrderCount && previousOrderCount !== 0) {
+                    // ※本来はここで「チーン！」という音（Audio）を鳴らす処理を入れます
+                    showToast("🔔 新規オーダーが入りました！");
+                }
+                previousOrderCount = orders.length;
+
+                // 未提供件数の更新
+                document.getElementById('pending-count').innerText = orders.length;
+
+                // 注文がない場合
+                if (orders.length === 0) {
+                    grid.innerHTML = '<div class="empty-state">🎉 現在、待機中のオーダーはありません</div>';
+                    return;
+                }
+
+                // 古い注文から順に表示するため、作成日時で並び替え
+                orders.sort((a, b) => {
+                    const timeA = a.createdAt ? a.createdAt.toMillis() : Date.now();
+                    const timeB = b.createdAt ? b.createdAt.toMillis() : Date.now();
+                    return timeA - timeB;
+                });
+
+                grid.innerHTML = "";
+                
+                orders.forEach(order => {
+                    const isCall = order.menuName.includes("呼出");
+                    const timeStr = order.createdAt ? new Date(order.createdAt.toMillis()).toLocaleTimeString('ja-JP', {hour: '2-digit', minute:'2-digit'}) : 'たった今';
+                    
+                    const ticket = document.createElement('div');
+                    ticket.className = `ticket ${isCall ? 'call' : ''}`;
+                    
+                    ticket.innerHTML = `
+                        <div class="ticket-header">
+                            <div class="table-id">${order.tableId}卓</div>
+                            <div class="time-elapsed">${timeStr}</div>
+                        </div>
+                        <div class="ticket-body">
+                            <div class="menu-name">${order.menuName}</div>
+                        </div>
+                        <button class="btn-serve" onclick="window.serveOrder('${order.id}', ${isCall})">
+                            ${isCall ? '対応済にする' : '提供済にする'}
+                        </button>
+                    `;
+                    grid.appendChild(ticket);
+                });
+            });
+        }
+
+        // 提供済（消し込み）処理
+        window.serveOrder = async (orderId, isCall) => {
+            try {
+                // ステータスを "served" に変更することでKDS画面からは消えるが、お客様の履歴には残る仕組みです
+                await updateDoc(doc(db, "orders", orderId), { status: "served" });
+                showToast(isCall ? "✅ 呼出に対応しました" : "🍽️ 提供済にしました");
+            } catch (error) {
+                console.error("消し込みエラー:", error);
+                alert("通信エラーが発生しました。");
+            }
+        };
+
+        // 起動
+        startKDS();
+    </script>
+</body>
+</html>
