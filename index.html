@@ -1,3 +1,5 @@
+2:28
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -5,41 +7,59 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>モバイルオーダー</title>
     <style>
-        body { font-family: sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; }
-        .auth-screen { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #f8f9fa; z-index: 999; text-align: center; padding-top: 50px; }
-        .auth-box { background: white; margin: 20px auto; padding: 20px; border-radius: 16px; width: 85%; max-width: 360px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; color: #333; }
+        .header { background-color: #fff; padding: 20px; text-align: center; border-bottom: 1px solid #eee; position: sticky; top: 0; z-index: 100; }
+        .header h1 { margin: 0; font-size: 1.2rem; }
+        .info-bar { background-color: #e9ecef; padding: 8px; text-align: center; font-size: 0.85rem; font-weight: bold; }
         .container { padding: 16px; }
-        .menu-card { background: white; padding: 15px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .menu-card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.04); display: flex; justify-content: space-between; align-items: center; }
+        .menu-info h3 { margin: 0 0 4px 0; font-size: 1.1rem; }
+        .menu-info .price { color: #e44d26; font-weight: bold; font-size: 1.05rem; }
+        .menu-info .stock { font-size: 0.8rem; color: #6c757d; margin-top: 4px; }
+        .order-btn { background-color: #ffc107; border: none; padding: 10px 20px; font-weight: bold; border-radius: 20px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .order-btn:disabled { background-color: #dee2e6; color: #adb5bd; box-shadow: none; }
+        .auth-screen { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #f8f9fa; z-index: 999; text-align: center; padding-top: 80px; box-sizing: border-box; }
+        .auth-box { background: white; margin: 0 auto; padding: 30px 20px; border-radius: 16px; width: 85%; max-width: 360px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .auth-box input { width: 80%; padding: 12px; font-size: 1.5rem; text-align: center; letter-spacing: 10px; border: 2px solid #ddd; border-radius: 8px; margin: 20px 0; }
+        .auth-box button { background-color: #007aff; color: white; border: none; padding: 12px 30px; font-size: 1rem; font-weight: bold; border-radius: 25px; cursor: pointer; width: 85%; }
     </style>
 </head>
 <body>
 
     <div id="pin-set-screen" class="auth-screen">
         <div class="auth-box">
-            <h2>🔑 暗証番号を設定</h2>
+            <h2>🔑 暗証番号の設定</h2>
             <input type="password" id="new-pin" maxlength="4" placeholder="••••" pattern="\d*">
             <button id="set-pin-btn">設定する</button>
         </div>
     </div>
+
     <div id="pin-enter-screen" class="auth-screen">
         <div class="auth-box">
-            <h2>🔓 暗証番号を入力</h2>
+            <h2>🔓 暗証番号の入力</h2>
             <input type="password" id="input-pin" maxlength="4" placeholder="••••" pattern="\d*">
             <button id="check-pin-btn">ロック解除</button>
         </div>
     </div>
 
-    <div id="main-content">
-        <h1>メニュー</h1>
-        <div id="menu-list"></div>
-        <h3>📋 注文履歴</h3>
-        <div id="order-history"></div>
-        <p>合計: <span id="total-price">0</span>円</p>
+    <div class="header">
+        <h1 id="shop-title">モバイルオーダー</h1>
     </div>
+    <div class="info-bar" id="table-info">読み込み中...</div>
+
+    <div class="container" id="menu-list">
+        </div>
+    <div class="container">
+    <h3>📋 注文履歴</h3>
+    <div id="order-history"></div>
+    <div style="text-align: right; margin-top: 10px; font-weight: bold;">
+        合計: <span id="total-price">0</span>円
+    </div>
+</div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-        import { getFirestore, doc, getDoc, updateDoc, onSnapshot, increment, collection, addDoc, serverTimestamp, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, updateDoc, onSnapshot, increment, collection } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyD11KS2FcAeVF17n62FEJ0GVwiW-z9sf4A",
@@ -50,71 +70,128 @@
             appId: "1:571239549348:web:c6c5c8c2f8661e02ef9931",
             measurementId: "G-7R4R6N4C3M"
         };
-        const db = getFirestore(initializeApp(firebaseConfig));
-        const tableId = new URLSearchParams(window.location.search).get('table') || '101';
-        const tableRef = doc(db, "tables", tableId);
 
-        // 起動時にテーブル状態をチェック
-        (async () => {
-            const snap = await getDoc(tableRef);
-            if (snap.exists() && snap.data().pin) {
-                window.savedPin = snap.data().pin;
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const shopId = urlParams.get('shop') || 'shibuya';
+        const tableId = urlParams.get('table') || '101';
+        document.getElementById('shop-title').innerText = `${shopId.toUpperCase()}店 メニュー`;
+        document.getElementById('table-info').innerText = `${tableId}番テーブル`;
+
+        const tableRef = doc(db, "tables", tableId);
+        let savedPin = "";
+
+        async function checkTableStatus() {
+            const tableSnap = await getDoc(tableRef);
+            if (tableSnap.exists() && tableSnap.data().pin) {
+                savedPin = tableSnap.data().pin;
                 document.getElementById('pin-enter-screen').style.display = 'block';
             } else {
                 document.getElementById('pin-set-screen').style.display = 'block';
             }
-        })();
+        }
 
         document.getElementById('set-pin-btn').onclick = async () => {
-            const val = document.getElementById('new-pin').value;
-            await updateDoc(tableRef, { pin: val });
-            window.savedPin = val;
-            hideAuthAndStart();
+            const pinVal = document.getElementById('new-pin').value;
+            if (pinVal.length === 4) {
+                await updateDoc(tableRef, { pin: pinVal });
+                document.getElementById('pin-set-screen').style.display = 'none';
+                startMenuSync();
+            }
         };
 
+                // ❷ 入力された暗証番号をチェックする処理
         document.getElementById('check-pin-btn').onclick = () => {
-            if (document.getElementById('input-pin').value === window.savedPin) {
-                hideAuthAndStart();
-            } else { alert("番号が違います"); }
+            if (document.getElementById('input-pin').value === savedPin) {
+                // ロック解除
+                document.getElementById('pin-enter-screen').style.display = 'none';
+                
+                // 💡 両方の機能をスタートさせる
+                startMenuSync();
+                startOrderHistory(); 
+            } else {
+                alert("❌ 暗証番号が違います！");
+                document.getElementById('input-pin').value = "";
+            }
         };
 
-        function hideAuthAndStart() {
-            document.getElementById('pin-set-screen').style.display = 'none';
-            document.getElementById('pin-enter-screen').style.display = 'none';
-            startMenuSync();
-            startOrderHistory();
-        }
-
-        // 以下、以前と同じ同期関数...
-        function startMenuSync() {
-            onSnapshot(collection(db, "products"), (snap) => {
-                const list = document.getElementById('menu-list');
-                list.innerHTML = "";
-                snap.forEach(d => {
-                    const data = d.data();
-                    list.innerHTML += `<div class="menu-card"><div>${data.name}</div><button onclick="window.orderItem('${d.id}', '${data.name}', ${data.price})">注文</button></div>`;
-                });
-            });
-        }
-
+        // 【注文履歴を監視して画面に表示する機能】
+        // これはボタンの「外」に配置します
         function startOrderHistory() {
-            onSnapshot(query(collection(db, "orders"), where("tableId", "==", tableId)), (snap) => {
-                const hist = document.getElementById('order-history');
+            const q = query(collection(db, "orders"), where("tableId", "==", tableId));
+            
+            onSnapshot(q, (snapshot) => {
+                const historyList = document.getElementById('order-history');
+                historyList.innerHTML = "";
                 let total = 0;
-                hist.innerHTML = "";
-                snap.forEach(d => {
-                    const data = d.data();
-                    total += data.price;
-                    hist.innerHTML += `<div>${data.menuName}: ¥${data.price}</div>`;
+
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    total += Number(data.price); // 数値として合計を計算
+
+                    const div = document.createElement('div');
+                    div.style.padding = "5px 0";
+                    div.style.borderBottom = "1px solid #eee";
+                    div.innerHTML = `${data.menuName} ... ¥${data.price}`;
+                    historyList.appendChild(div);
                 });
+
                 document.getElementById('total-price').innerText = total;
             });
         }
 
-        window.orderItem = async (id, name, price) => {
-            await updateDoc(doc(db, "products", id), { stock: increment(-1) });
-            await addDoc(collection(db, "orders"), { tableId, menuName: name, price, createdAt: serverTimestamp() });
+        
+
+                // メニュー一覧表示（ここは画面に並べる機能だけ！）
+        function startMenuSync() {
+            onSnapshot(collection(db, "products"), (snapshot) => {
+                const menuList = document.getElementById('menu-list');
+                menuList.innerHTML = "";
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const div = document.createElement('div');
+                    div.className = 'menu-card';
+                    div.innerHTML = `
+                        <div class="menu-info">
+                            <h3>${data.name}</h3>
+                            <div class="price">¥${data.price}</div>
+                            <div class="stock">残り在庫: ${data.stock}個</div>
+                        </div>
+                        <button class="order-btn" ${data.stock <= 0 ? 'disabled' : ''} onclick="window.orderItem('${doc.id}', '${data.name}', ${data.price})">
+                            ${data.stock > 0 ? '注文' : '売切'}
+                        </button>
+                    `;
+                    menuList.appendChild(div);
+                });
+            });
+        }
+
+        // 注文ボタンを押した時の処理（ここで在庫を減らし、履歴を保存する！）
+        import { addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+        window.orderItem = async (productId, name, price) => {
+            try {
+                // 1. 在庫を減らす
+                await updateDoc(doc(db, "products", productId), { stock: increment(-1) });
+
+                // 2. 注文履歴を保存
+                await addDoc(collection(db, "orders"), {
+                    tableId: tableId,
+                    menuName: name,
+                    price: price,
+                    status: "ordered",
+                    createdAt: serverTimestamp()
+                });
+
+                alert("🎉 注文を受け付けました！");
+            } catch (error) {
+                console.error("注文エラー:", error);
+                alert("通信エラーです。");
+            }
         };
+        checkTableStatus();
     </script>
 </body>
 </html>
