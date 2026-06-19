@@ -62,9 +62,25 @@
             box-shadow: none;
             cursor: not-allowed;
         }
+        /* セキュリティエラー用の警告画面スタイル */
+        .error-screen {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #fff;
+            z-index: 999;
+            text-align: center;
+            padding-top: 100px;
+        }
+        .error-screen h2 { color: #dc3545; }
     </style>
 </head>
 <body>
+
+    <div id="error-layer" class="error-screen">
+        <h2>⚠️ アクセスエラー</h2>
+        <p>このQRコードまたはURLは無効です。<br>もう一度お店のQRコードを読み込んでください。</p>
+    </div>
 
     <div class="header">
         <h1 id="shop-title">モバイルオーダー</h1>
@@ -85,58 +101,85 @@
     </div>
 
     <script type="module">
-        // Firebaseの必須システムをWebから直接読み込みます
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-        import { getFirestore, doc, onSnapshot, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, onSnapshot, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-        // 🛠️ あなたのFirebaseの設定値（Config）をここに直接合体させます
         const firebaseConfig = {
             apiKey: "AIzaSyD11KS2FcAeVF17n62FEJ0GVwiW-z9sf4A",
             authDomain: "store-eec2f.firebaseapp.com",
             projectId: "store-eec2f",
             storageBucket: "store-eec2f.firebasestorage.app",
             messagingSenderId: "571239549348",
-            appId: "1:571239549348:web:c6c5c8c2f8661e02ef9931"
+            appId: "1:571239549348:web:c6c5c8c2f8661e02ef9931",
+            measurementId: "G-7R4R6N4C3M"
         };
 
-        // Firebaseを初期化してデータベース（db）を起動
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // URLから店舗名と卓番号を自動識別
+        // URLから店舗名、卓番号、そして「暗号（token）」を取得
         const urlParams = new URLSearchParams(window.location.search);
         const shopId = urlParams.get('shop') || 'shibuya';
         const tableId = urlParams.get('table') || '101';
+        const inputToken = urlParams.get('token') || ''; // 👈 URLに入っている暗号
         
         document.getElementById('shop-title').innerText = `${shopId.toUpperCase()}店 メニュー`;
         document.getElementById('table-info').innerText = `${tableId}番テーブル`;
 
-        // データベース上の「生ビール」の場所を指定
+        // データベース上の「生ビール」と「テーブル情報」の場所を指定
         const beerRef = doc(db, "products", "beer");
+        const tableRef = doc(db, "tables", tableId);
         let currentStock = 0;
 
-        // リアルタイム自動同期システム
-        onSnapshot(beerRef, (snapshot) => {
-            if (snapshot.exists()) {
-                const data = snapshot.data();
-                currentStock = data.stock;
-
-                document.getElementById('beer-name').innerText = data.name;
-                document.getElementById('beer-price').innerText = `¥${data.price}`;
-                document.getElementById('beer-stock').innerText = `残り在庫: ${currentStock}個`;
-
-                const btn = document.getElementById('beer-btn');
-                if (currentStock > 0) {
-                    btn.innerText = "注文する";
-                    btn.disabled = false;
+        // 【セキュリティチェック】アクセスされた卓番号の暗号をFirebaseに確認しにいく
+        async function checkSecurity() {
+            try {
+                const tableSnap = await getDoc(tableRef);
+                if (tableSnap.exists()) {
+                    const tableData = tableSnap.data();
+                    
+                    // 「現在使用中(isActive=true)」かつ「URLの暗号とFirebaseの暗号が完全に一致」しているか確認
+                    if (tableData.isActive === true && tableData.token === inputToken) {
+                        // 認証成功：メニューのリアルタイム監視を開始
+                        startMenuSync();
+                    } else {
+                        // 認証失敗：エラー画面を表示してブロック
+                        document.getElementById('error-layer').style.display = 'block';
+                    }
                 } else {
-                    btn.innerText = "売切";
-                    btn.disabled = true;
+                    // テーブルデータ自体が存在しない場合もブロック
+                    document.getElementById('error-layer').style.display = 'block';
                 }
-            } else {
-                document.getElementById('beer-name').innerText = "商品がありません（Firebaseの登録を確認してください）";
+            } catch (error) {
+                console.error("セキュリティチェックエラー:", error);
+                document.getElementById('error-layer').style.display = 'block';
             }
-        });
+        }
+
+        // メニューのリアルタイム自動同期システム
+        function startMenuSync() {
+            onSnapshot(beerRef, (snapshot) => {
+                if (snapshot.exists()) {
+                    const data = snapshot.data();
+                    currentStock = data.stock;
+
+                    document.getElementById('beer-name').innerText = data.name;
+                    document.getElementById('beer-price').innerText = `¥${data.price}`;
+                    document.getElementById('beer-stock').innerText = `残り在庫: ${currentStock}個`;
+
+                    const btn = document.getElementById('beer-btn');
+                    if (currentStock > 0) {
+                        btn.innerText = "注文する";
+                        btn.disabled = false;
+                    } else {
+                        btn.innerText = "売切";
+                        btn.disabled = true;
+                    }
+                } else {
+                    document.getElementById('beer-name').innerText = "商品がありません";
+                }
+            });
+        }
 
         // 爆速注文処理（楽観的UI）
         document.getElementById('beer-btn').addEventListener('click', async () => {
@@ -160,6 +203,9 @@
                 alert("通信エラーが発生しました。リロードしてください。");
             }
         });
+
+        // アプリ起動時にまずセキュリティチェックを実行
+        checkSecurity();
     </script>
 </body>
 </html>
