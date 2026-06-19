@@ -73,11 +73,14 @@
         合計: <span id="total-price">0</span>円
         </div>
         <div id="order-history"></div>
+        <button id="checkout-btn" style="width: 100%; padding: 15px; margin-top: 20px; background: #e44d26; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer;">
+        お会計を完了する
+    </button>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-        import { getFirestore, doc, getDoc, updateDoc, onSnapshot, increment, collection, addDoc, serverTimestamp, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, updateDoc, onSnapshot, increment, collection, addDoc, serverTimestamp, query, wherd, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyD11KS2FcAeVF17n62FEJ0GVwiW-z9sf4A",
@@ -127,7 +130,25 @@
             } else {
                 alert("❌ 暗証番号が違います！");
             }
-        };
+        document.getElementById('checkout-btn').onclick = async () => {
+    if (!confirm("お会計を完了して、注文履歴をリセットしてもよろしいですか？")) return;
+
+    try {
+        const q = query(collection(db, "orders"), where("tableId", "==", tableId));
+        const snapshot = await getDocs(q);
+        
+        // 取得した注文履歴をすべて削除
+        snapshot.forEach(async (docSnap) => {
+            await deleteDoc(doc(db, "orders", docSnap.id));
+        });
+
+        alert("お会計が完了しました。ご利用ありがとうございました！");
+        location.reload(); // 画面をリロードして初期状態に戻す
+      } catch (error) {
+        console.error("エラー:", error);
+        alert("通信エラーが発生しました。");
+      }
+    };
 
         function startMenuSync() {
             onSnapshot(collection(db, "products"), (snapshot) => {
