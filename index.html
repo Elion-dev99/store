@@ -119,6 +119,12 @@
                         <button class="order-btn" ${data.stock <= 0 ? 'disabled' : ''} onclick="window.orderItem('${doc.id}')">
                             ${data.stock > 0 ? '注文' : '売切'}
                         </button>
+                        await addDoc(collection(db, "orders"), {
+                        tableId: tableId,          // どの席からの注文か
+                        menuName: productData.name, // 何を
+                        price: productData.price,   // いくらで
+                        status: "ordered",         // 状態
+                        createdAt: serverTimestamp() // 注文した時間
                     `;
                     menuList.appendChild(div);
                 });
