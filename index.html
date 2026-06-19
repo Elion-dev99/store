@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>モバイルオーダー</title>
     <style>
-        /* 📱 アプリっぽく見せるためのサクサク動くモダンなデザイン（CSS） */
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: #f8f9fa;
@@ -41,7 +40,6 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            transition: transform 0.1s;
         }
         .menu-info h3 { margin: 0 0 4px 0; font-size: 1.1rem; }
         .menu-info .price { color: #e44d26; font-weight: bold; font-size: 1.05rem; }
@@ -54,12 +52,9 @@
             border-radius: 20px;
             cursor: pointer;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: all 0.1s;
         }
-        /* ボタンを押した瞬間に小気味よく沈み込む演出（もっさり感の解消） */
         .order-btn:active {
             transform: scale(0.95);
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
         }
         .order-btn:disabled {
             background-color: #dee2e6;
@@ -90,10 +85,25 @@
     </div>
 
     <script type="module">
-        import { db } from "./firebase-config.js";
-        import { doc, onSnapshot, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        // Firebaseの必須システムをWebから直接読み込みます
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+        import { getFirestore, doc, onSnapshot, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-        // 1. URLから「店舗名」と「卓番号」を1秒で自動識別する（大手のログインの壁を突破）
+        // 🛠️ あなたのFirebaseの設定値（Config）をここに直接合体させます
+        const firebaseConfig = {
+            apiKey: "AIzaSyD11KS2FcAeVF17n62FEJ0GVwiW-z9sf4A",
+            authDomain: "store-eec2f.firebaseapp.com",
+            projectId: "store-eec2f",
+            storageBucket: "store-eec2f.firebasestorage.app",
+            messagingSenderId: "571239549348",
+            appId: "1:571239549348:web:c6c5c8c2f8661e02ef9931"
+        };
+
+        // Firebaseを初期化してデータベース（db）を起動
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // URLから店舗名と卓番号を自動識別
         const urlParams = new URLSearchParams(window.location.search);
         const shopId = urlParams.get('shop') || 'shibuya';
         const tableId = urlParams.get('table') || '101';
@@ -103,16 +113,14 @@
 
         // データベース上の「生ビール」の場所を指定
         const beerRef = doc(db, "products", "beer");
-
         let currentStock = 0;
 
-        // 2. リアルタイム自動同期（通信の往復待ちをゼロにする監視システム）
+        // リアルタイム自動同期システム
         onSnapshot(beerRef, (snapshot) => {
             if (snapshot.exists()) {
                 const data = snapshot.data();
                 currentStock = data.stock;
 
-                // 画面の表示を一瞬で書き換える
                 document.getElementById('beer-name').innerText = data.name;
                 document.getElementById('beer-price').innerText = `¥${data.price}`;
                 document.getElementById('beer-stock').innerText = `残り在庫: ${currentStock}個`;
@@ -126,16 +134,15 @@
                     btn.disabled = true;
                 }
             } else {
-                document.getElementById('beer-name').innerText = "商品がありません";
+                document.getElementById('beer-name').innerText = "商品がありません（Firebaseの登録を確認してください）";
             }
         });
 
-        // 3. 【神機能】楽観的UIによる爆速注文処理
+        // 爆速注文処理（楽観的UI）
         document.getElementById('beer-btn').addEventListener('click', async () => {
             const btn = document.getElementById('beer-btn');
             const stockText = document.getElementById('beer-stock');
             
-            // 💡 通信結果を待たずに、その場でお客様の画面の数値を先回りで引き算！（体感速度0秒）
             currentStock--;
             stockText.innerText = `残り在庫: ${currentStock}個`;
             if (currentStock <= 0) {
@@ -144,7 +151,6 @@
             }
 
             try {
-                // バックグラウンドでGoogleクラウドのデータを「-1」に書き換える命令を送る
                 await updateDoc(beerRef, {
                     stock: increment(-1)
                 });
