@@ -1,5 +1,3 @@
-2:28
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -47,19 +45,18 @@
     </div>
     <div class="info-bar" id="table-info">読み込み中...</div>
 
-    <div class="container" id="menu-list">
-        </div>
+    <div class="container" id="menu-list"></div>
     <div class="container">
-    <h3>📋 注文履歴</h3>
-    <div id="order-history"></div>
-    <div style="text-align: right; margin-top: 10px; font-weight: bold;">
-        合計: <span id="total-price">0</span>円
+        <h3>📋 注文履歴</h3>
+        <div id="order-history"></div>
+        <div style="text-align: right; margin-top: 10px; font-weight: bold; font-size: 1.2rem;">
+            合計: <span id="total-price">0</span>円
+        </div>
     </div>
-</div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-        import { getFirestore, doc, getDoc, updateDoc, onSnapshot, increment, collection } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, updateDoc, onSnapshot, increment, collection, addDoc, serverTimestamp, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyD11KS2FcAeVF17n62FEJ0GVwiW-z9sf4A",
@@ -75,13 +72,11 @@
         const db = getFirestore(app);
 
         const urlParams = new URLSearchParams(window.location.search);
-        const shopId = urlParams.get('shop') || 'shibuya';
         const tableId = urlParams.get('table') || '101';
-        document.getElementById('shop-title').innerText = `${shopId.toUpperCase()}店 メニュー`;
-        document.getElementById('table-info').innerText = `${tableId}番テーブル`;
-
         const tableRef = doc(db, "tables", tableId);
         let savedPin = "";
+        
+        document.getElementById('table-info').innerText = `${tableId}番テーブル`;
 
         async function checkTableStatus() {
             const tableSnap = await getDoc(tableRef);
@@ -99,52 +94,20 @@
                 await updateDoc(tableRef, { pin: pinVal });
                 document.getElementById('pin-set-screen').style.display = 'none';
                 startMenuSync();
+                startOrderHistory();
             }
         };
 
-                // ❷ 入力された暗証番号をチェックする処理
         document.getElementById('check-pin-btn').onclick = () => {
             if (document.getElementById('input-pin').value === savedPin) {
-                // ロック解除
                 document.getElementById('pin-enter-screen').style.display = 'none';
-                
-                // 💡 両方の機能をスタートさせる
                 startMenuSync();
-                startOrderHistory(); 
+                startOrderHistory();
             } else {
                 alert("❌ 暗証番号が違います！");
-                document.getElementById('input-pin').value = "";
             }
         };
 
-        // 【注文履歴を監視して画面に表示する機能】
-        // これはボタンの「外」に配置します
-        function startOrderHistory() {
-            const q = query(collection(db, "orders"), where("tableId", "==", tableId));
-            
-            onSnapshot(q, (snapshot) => {
-                const historyList = document.getElementById('order-history');
-                historyList.innerHTML = "";
-                let total = 0;
-
-                snapshot.forEach((doc) => {
-                    const data = doc.data();
-                    total += Number(data.price); // 数値として合計を計算
-
-                    const div = document.createElement('div');
-                    div.style.padding = "5px 0";
-                    div.style.borderBottom = "1px solid #eee";
-                    div.innerHTML = `${data.menuName} ... ¥${data.price}`;
-                    historyList.appendChild(div);
-                });
-
-                document.getElementById('total-price').innerText = total;
-            });
-        }
-
-        
-
-                // メニュー一覧表示（ここは画面に並べる機能だけ！）
         function startMenuSync() {
             onSnapshot(collection(db, "products"), (snapshot) => {
                 const menuList = document.getElementById('menu-list');
@@ -168,29 +131,37 @@
             });
         }
 
-        // 注文ボタンを押した時の処理（ここで在庫を減らし、履歴を保存する！）
-        import { addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        function startOrderHistory() {
+            const q = query(collection(db, "orders"), where("tableId", "==", tableId));
+            onSnapshot(q, (snapshot) => {
+                const historyList = document.getElementById('order-history');
+                historyList.innerHTML = "";
+                let total = 0;
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    total += Number(data.price);
+                    const div = document.createElement('div');
+                    div.style.padding = "5px 0";
+                    div.style.borderBottom = "1px solid #eee";
+                    div.innerHTML = `${data.menuName} ... ¥${data.price}`;
+                    historyList.appendChild(div);
+                });
+                document.getElementById('total-price').innerText = total;
+            });
+        }
 
         window.orderItem = async (productId, name, price) => {
-            try {
-                // 1. 在庫を減らす
-                await updateDoc(doc(db, "products", productId), { stock: increment(-1) });
-
-                // 2. 注文履歴を保存
-                await addDoc(collection(db, "orders"), {
-                    tableId: tableId,
-                    menuName: name,
-                    price: price,
-                    status: "ordered",
-                    createdAt: serverTimestamp()
-                });
-
-                alert("🎉 注文を受け付けました！");
-            } catch (error) {
-                console.error("注文エラー:", error);
-                alert("通信エラーです。");
-            }
+            await updateDoc(doc(db, "products", productId), { stock: increment(-1) });
+            await addDoc(collection(db, "orders"), {
+                tableId: tableId,
+                menuName: name,
+                price: price,
+                status: "ordered",
+                createdAt: serverTimestamp()
+            });
+            alert("🎉 注文を受け付けました！");
         };
+
         checkTableStatus();
     </script>
 </body>
