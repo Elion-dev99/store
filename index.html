@@ -20,31 +20,19 @@
         .auth-box { background: white; margin: 0 auto; padding: 30px 20px; border-radius: 16px; width: 85%; max-width: 360px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
         .auth-box input { width: 80%; padding: 12px; font-size: 1.5rem; text-align: center; letter-spacing: 10px; border: 2px solid #ddd; border-radius: 8px; margin: 20px 0; }
         .auth-box button { background-color: #007aff; color: white; border: none; padding: 12px 30px; font-size: 1rem; font-weight: bold; border-radius: 25px; cursor: pointer; width: 85%; }
-        /* 通知用トーストのスタイル */
-#toast-notification {
-    visibility: hidden;
-    min-width: 250px;
-    background-color: #333;
-    color: #fff;
-    text-align: center;
-    border-radius: 25px;
-    padding: 16px;
-    position: fixed;
-    z-index: 1000;
-    top: 30px;
-    left: 50%;
-    transform: translateX(-50%);
-    transition: visibility 0s, opacity 0.5s linear;
-    opacity: 0;
-}
-#toast-notification.show {
-    visibility: visible;
-    opacity: 1;
-}
+        
+        #toast-notification {
+            visibility: hidden; min-width: 250px; background-color: #333; color: #fff;
+            text-align: center; border-radius: 25px; padding: 16px; position: fixed;
+            z-index: 1000; top: 30px; left: 50%; transform: translateX(-50%);
+            transition: visibility 0s, opacity 0.5s linear; opacity: 0;
+        }
+        #toast-notification.show { visibility: visible; opacity: 1; }
     </style>
 </head>
 <body>
-<div id="toast-notification">注文を受け付けました！🎉</div>
+    <div id="toast-notification">注文を受け付けました！🎉</div>
+
     <div id="pin-set-screen" class="auth-screen">
         <div class="auth-box">
             <h2>🔑 暗証番号の設定</h2>
@@ -70,33 +58,28 @@
     <div class="container">
         <h3>📋 注文履歴</h3>
         <div style="text-align: right; margin-top: 10px; font-weight: bold; font-size: 1.2rem;">
-        合計: <span id="total-price">0</span>円
+            合計: <span id="total-price">0</span>円
         </div>
         <div id="order-history"></div>
         <button id="checkout-btn" style="width: 100%; padding: 15px; margin-top: 20px; background: #e44d26; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer;">
-        お会計を完了する
-    </button>
+            お会計を完了する
+        </button>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-        import { getFirestore, doc, getDoc, updateDoc, onSnapshot, increment, collection, addDoc, serverTimestamp, query, wherd, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, updateDoc, onSnapshot, increment, collection, addDoc, serverTimestamp, query, where, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-        const firebaseConfig = {
+        const db = getFirestore(initializeApp({
             apiKey: "AIzaSyD11KS2FcAeVF17n62FEJ0GVwiW-z9sf4A",
             authDomain: "store-eec2f.firebaseapp.com",
             projectId: "store-eec2f",
             storageBucket: "store-eec2f.firebasestorage.app",
             messagingSenderId: "571239549348",
-            appId: "1:571239549348:web:c6c5c8c2f8661e02ef9931",
-            measurementId: "G-7R4R6N4C3M"
-        };
+            appId: "1:571239549348:web:c6c5c8c2f8661e02ef9931"
+        }));
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-
-        const urlParams = new URLSearchParams(window.location.search);
-        const tableId = urlParams.get('table') || '101';
+        const tableId = new URLSearchParams(window.location.search).get('table') || '101';
         const tableRef = doc(db, "tables", tableId);
         let savedPin = "";
         
@@ -130,25 +113,23 @@
             } else {
                 alert("❌ 暗証番号が違います！");
             }
+        };
+
         document.getElementById('checkout-btn').onclick = async () => {
-    if (!confirm("お会計を完了して、注文履歴をリセットしてもよろしいですか？")) return;
-
-    try {
-        const q = query(collection(db, "orders"), where("tableId", "==", tableId));
-        const snapshot = await getDocs(q);
-        
-        // 取得した注文履歴をすべて削除
-        snapshot.forEach(async (docSnap) => {
-            await deleteDoc(doc(db, "orders", docSnap.id));
-        });
-
-        alert("お会計が完了しました。ご利用ありがとうございました！");
-        location.reload(); // 画面をリロードして初期状態に戻す
-      } catch (error) {
-        console.error("エラー:", error);
-        alert("通信エラーが発生しました。");
-      }
-    };
+            if (!confirm("お会計を完了して、注文履歴をリセットしてもよろしいですか？")) return;
+            try {
+                const q = query(collection(db, "orders"), where("tableId", "==", tableId));
+                const snapshot = await getDocs(q);
+                for (const docSnap of snapshot.docs) {
+                    await deleteDoc(doc(db, "orders", docSnap.id));
+                }
+                alert("お会計が完了しました。ご利用ありがとうございました！");
+                location.reload();
+            } catch (error) {
+                console.error("エラー:", error);
+                alert("通信エラーが発生しました。");
+            }
+        };
 
         function startMenuSync() {
             onSnapshot(collection(db, "products"), (snapshot) => {
@@ -174,46 +155,33 @@
         }
 
         function startOrderHistory() {
-            const q = query(collection(db, "orders"), where("tableId", "==", tableId));
-            onSnapshot(q, (snapshot) => {
+            onSnapshot(query(collection(db, "orders"), where("tableId", "==", tableId)), (snapshot) => {
                 const historyList = document.getElementById('order-history');
                 historyList.innerHTML = "";
                 let total = 0;
                 snapshot.forEach((doc) => {
                     const data = doc.data();
                     total += Number(data.price);
-                    const div = document.createElement('div');
-                    div.style.padding = "5px 0";
-                    div.style.borderBottom = "1px solid #eee";
-                    div.innerHTML = `${data.menuName} ... ¥${data.price}`;
-                    historyList.appendChild(div);
+                    historyList.appendChild(Object.assign(document.createElement('div'), {
+                        style: "padding: 5px 0; border-bottom: 1px solid #eee;",
+                        innerHTML: `${data.menuName} ... ¥${data.price}`
+                    }));
                 });
                 document.getElementById('total-price').innerText = total;
             });
         }
 
-        // 注文ボタンを押した時の処理（通知部分を改善）
-window.orderItem = async (productId, name, price) => {
-    try {
-        await updateDoc(doc(db, "products", productId), { stock: increment(-1) });
-        await addDoc(collection(db, "orders"), {
-            tableId: tableId,
-            menuName: name,
-            price: price,
-            status: "ordered",
-            createdAt: serverTimestamp()
-        });
-
-        // 🎉 トースト通知を表示する関数
-        const toast = document.getElementById("toast-notification");
-        toast.className = "show";
-        setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
-
-    } catch (error) {
-        console.error("注文エラー:", error);
-        alert("通信エラーです。");
-    }
-};
+        window.orderItem = async (productId, name, price) => {
+            try {
+                await updateDoc(doc(db, "products", productId), { stock: increment(-1) });
+                await addDoc(collection(db, "orders"), { tableId, menuName: name, price, status: "ordered", createdAt: serverTimestamp() });
+                const toast = document.getElementById("toast-notification");
+                toast.className = "show";
+                setTimeout(() => { toast.className = ""; }, 3000);
+            } catch (error) {
+                alert("通信エラーです。");
+            }
+        };
 
         checkTableStatus();
     </script>
