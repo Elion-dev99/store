@@ -107,7 +107,33 @@
             } else {
                 alert("❌ 番号が違います");
             }
+            // 【注文履歴を監視して画面に表示する機能】
+function startOrderHistory() {
+    // ordersコレクションから、現在のテーブルの注文だけを取得
+    const q = query(collection(db, "orders"), where("tableId", "==", tableId));
+    
+    onSnapshot(q, (snapshot) => {
+        const historyList = document.getElementById('order-history');
+        historyList.innerHTML = "";
+        let total = 0;
+
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            total += data.price; // 合計金額を計算
+
+            const div = document.createElement('div');
+            div.style.padding = "5px 0";
+            div.style.borderBottom = "1px solid #eee";
+            div.innerHTML = `${data.menuName} ... ¥${data.price}`;
+            historyList.appendChild(div);
+        });
+
+        document.getElementById('total-price').innerText = total;
+    });
+}
+
         };
+        
 
                 // メニュー一覧表示（ここは画面に並べる機能だけ！）
         function startMenuSync() {
