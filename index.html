@@ -196,25 +196,51 @@
             });
         }
 
-// 【どの商品が押されても対応できる注文処理】
-window.order = async (productId) => {
-    // 1. 注文対象の商品の場所を特定
-    const productRef = doc(db, "products", productId);
+//注文処理
+<div class="container" id="menu-list">
+    </div>
 
-    try {
-        // 2. データベースの在庫を -1 する（これだけでOK！）
-        await updateDoc(productRef, {
-            stock: increment(-1)
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, doc, getDoc, updateDoc, onSnapshot, increment, collection } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    // ... (firebaseConfig等の設定はそのまま) ...
+
+    // 💡 変更点：メニューを自動生成する関数
+    function startMenuSync() {
+        const menuList = document.getElementById('menu-list');
+        onSnapshot(collection(db, "products"), (snapshot) => {
+            menuList.innerHTML = ""; // 一度クリア
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                const div = document.createElement('div');
+                div.className = 'menu-card';
+                div.innerHTML = `
+                    <div class="menu-info">
+                        <h3>${data.name}</h3>
+                        <div class="price">¥${data.price}</div>
+                        <div class="stock">残り在庫: ${data.stock}個</div>
+                    </div>
+                    <button class="order-btn" ${data.stock <= 0 ? 'disabled' : ''} onclick="orderItem('${doc.id}')">
+                        ${data.stock > 0 ? '注文' : '売切'}
+                    </button>
+                `;
+                menuList.appendChild(div);
+            });
         });
-        
-        // 3. 完了通知
-        alert("🎉 注文を受け付けました！");
-        
-    } catch (error) {
-        console.error("注文エラー:", error);
-        alert("通信エラーが発生しました。");
     }
-};
+
+    // 💡 変更点：注文処理も商品IDを引数にとる形に変更
+    window.orderItem = async (id) => {
+        try {
+            await updateDoc(doc(db, "products", id), { stock: increment(-1) });
+            alert("🎉 注文を受け付けました！");
+        } catch (error) {
+            alert("通信エラーです。");
+        }
+    };
+    
+    // ... (checkTableStatus等の認証機能はそのまま) ...
+</script>
 
         // 最初にチェックを動かす
         checkTableStatus();
