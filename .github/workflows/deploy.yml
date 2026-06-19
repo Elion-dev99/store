@@ -3,20 +3,35 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches:
-      - main  # または master。あなたのリポジトリのデフォルトブランチ名に合わせてください
+      - main  # ⚠️デフォルトブランチがmasterの場合は master に書き換えてください
 
 permissions:
-  contents: write
+  contents: read
+  pages: write      # GitHub Pagesへの書き込み権限
+  id-token: write   # 認証用のトークン取得権限
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps:.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          branch: gh-pages # 公開用の専用ブランチ
-          folder: .        # リポジトリのルート全体を公開
+          path: '.' # リポジトリのルート全体をパックしてアップロード
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
