@@ -70,21 +70,16 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
         import { getFirestore, doc, getDoc, updateDoc, onSnapshot, increment, collection, addDoc, serverTimestamp, query, where, deleteDoc, getDocs, deleteField } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-        const firebaseConfig = {
+        const db = getFirestore(initializeApp({
             apiKey: "AIzaSyD11KS2FcAeVF17n62FEJ0GVwiW-z9sf4A",
             authDomain: "store-eec2f.firebaseapp.com",
             projectId: "store-eec2f",
             storageBucket: "store-eec2f.firebasestorage.app",
             messagingSenderId: "571239549348",
-            appId: "1:571239549348:web:c6c5c8c2f8661e02ef9931",
-            measurementId: "G-7R4R6N4C3M"
-        };
+            appId: "1:571239549348:web:c6c5c8c2f8661e02ef9931"
+        }));
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-
-        const urlParams = new URLSearchParams(window.location.search);
-        const tableId = urlParams.get('table') || '101';
+        const tableId = new URLSearchParams(window.location.search).get('table') || '101';
         const tableRef = doc(db, "tables", tableId);
         let savedPin = "";
         
@@ -120,18 +115,25 @@
             }
         };
 
-        // お会計ボタン処理
+        // お会計ボタン処理（キャッシュレス/現金分岐）
         document.getElementById('checkout-btn').onclick = async () => {
-            if (!confirm("お会計を完了し、注文履歴と暗証番号をリセットしてもよろしいですか？")) return;
+            const isCash = confirm("キャッシュレス決済（Apple Pay / PayPay）ですか？\n\nOK：このまま席で決済します\nキャンセル：レジまでお越しください");
+            
+            if (!isCash) {
+                alert("現金会計ですね。レジまでお越しください。店員が伝票を確認いたします。");
+                return;
+            }
+
+            if (!confirm("キャッシュレス決済を実行して履歴をリセットしてもよろしいですか？")) return;
+
             try {
                 const q = query(collection(db, "orders"), where("tableId", "==", tableId));
                 const snapshot = await getDocs(q);
                 for (const docSnap of snapshot.docs) {
                     await deleteDoc(doc(db, "orders", docSnap.id));
                 }
-                // 暗証番号を削除
                 await updateDoc(tableRef, { pin: deleteField() });
-                alert("お会計が完了しました。");
+                alert("決済が完了しました。ご利用ありがとうございました！");
                 location.reload();
             } catch (error) {
                 console.error("エラー:", error);
@@ -163,8 +165,7 @@
         }
 
         function startOrderHistory() {
-            const q = query(collection(db, "orders"), where("tableId", "==", tableId));
-            onSnapshot(q, (snapshot) => {
+            onSnapshot(query(collection(db, "orders"), where("tableId", "==", tableId)), (snapshot) => {
                 const historyList = document.getElementById('order-history');
                 historyList.innerHTML = "";
                 let total = 0;
