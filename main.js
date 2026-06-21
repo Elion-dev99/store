@@ -1,31 +1,45 @@
-html, body {
-  margin: 0;
-  padding: 0;
-  height: 100%;
-  background: #111;
-  color: #fff;
-  font-family: monospace;
+// ====== 初期ステータス ======
+let atk = 3;
+let enemyHp = 20;
+
+// ====== 自動攻撃（1秒ごと） ======
+setInterval(() => {
+  attack();
+}, 1000);
+
+// ====== 攻撃処理 ======
+function attack() {
+  addLog(`プレイヤーの攻撃！ -${atk}`);
+  damageEnemy(atk);
 }
 
-#app {
-  width: 100vw;     /* 画面幅いっぱい */
-  height: 100vh;    /* 画面高さいっぱい */
-  display: flex;
-  flex-direction: column;
-  padding: 16px;
-  box-sizing: border-box;
+// ====== 敵HP管理 ======
+function damageEnemy(amount) {
+  enemyHp -= amount;
+  updateEnemyHp();
+
+  if (enemyHp <= 0) {
+    enemyDefeated();
+  }
 }
 
-#enemy {
-  font-size: 24px;
+function updateEnemyHp() {
+  document.getElementById("hp").textContent = enemyHp;
 }
 
-#log {
-  flex: 1;                /* 残り全部をログに使う */
-  margin-top: 12px;
-  background: #222;
-  padding: 10px;
-  border-radius: 8px;
-  overflow-y: auto;
-  font-size: 14px;
+function enemyDefeated() {
+  addLog("敵を倒した！");
+  spawnEnemy();
+}
+
+function spawnEnemy() {
+  enemyHp = 20; // 後でスケールさせる
+  updateEnemyHp();
+}
+
+// ====== ログ表示 ======
+function addLog(text) {
+  const log = document.getElementById("log");
+  log.innerHTML += text + "<br>";
+  log.scrollTop = log.scrollHeight;
 }
